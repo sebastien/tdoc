@@ -1,5 +1,4 @@
-#!/usr/bin/env python3.8
-from tlang import tree
+#!/usr/bin/env python3
 import re, sys, os, logging, json, xml.sax.saxutils
 from typing import Optional,Any,List,Union,Iterable,Iterator,Tuple
 from enum import Enum

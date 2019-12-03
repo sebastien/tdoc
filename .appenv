@@ -1,0 +1,4 @@
+appenv_declare tdoc
+appenv_name    tdoc
+appenv_prepend PYTHONPATH "$APPENV_DIR/src/py"
+appenv_prepend PATH "$APPENV_DIR/bin"
