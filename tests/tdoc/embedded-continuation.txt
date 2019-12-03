@@ -1,0 +1,5 @@
+## @tdoc:indent spaces=4
+## title: Testing embedded continuation
+## section title="Section name"
+##     :
+And this line should be nested within the section.

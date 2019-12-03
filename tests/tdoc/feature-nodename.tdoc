@@ -1,0 +1,3 @@
+node id=name
+node#name
+node#name id=othername

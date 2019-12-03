@@ -1,0 +1,50 @@
+#!/bin/env tdoc --run=test
+#run
+#	tdoc -Oxml --no-comment
+#doc
+#	Ensures that the empty lines in the custom parser
+#	section are properly interepreted by the parser.
+#expect
+#	<?xml version="1.0"?>
+#	<section>Some line
+#	
+#	- One
+#	- Two
+#
+#	Other line
+#		indented line
+#
+#	<node><here /></node><section>Some line
+#
+#	- One
+#	- Two
+#
+#	Other line
+#		indented line
+
+<notnode<here</here></notnode></section>
+
+<notnode<here</here></notnode></section>
+section
+	Some line
+
+	- One
+	- Two
+
+	Other line
+		indented line
+	
+	node
+		here
+section|markdown
+	Some line
+
+	- One
+	- Two
+
+	Other line
+		indented line
+	
+	notnode
+		here
+# EOF
