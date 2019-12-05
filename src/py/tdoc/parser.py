@@ -37,9 +37,10 @@ class ParseOptions:
 	RESERVED = ("OPTIONS", "options", "indentPrefix")
 
 	OPTIONS = {
-		"document"   : ParseOption(bool         , False, "Wraps the result in a document node"),
 		"comments"   : ParseOption(bool         , False, "Includes comments in the output"),
+		"rootNode"   : ParseOption(Optional[str], None,  "Tag name for the root node (optinal)"),
 		"embed"      : ParseOption(bool         , False, "Turns on embedded mode"),
+		"embedNode"  : ParseOption(str          , "embed", "Tag name for embedded data in embedded mode"),
 		"embedLine"  : ParseOption(Optional[str], None , "Line prefix for embedded TDoc data (eg. '#')"),
 		"embedStart" : ParseOption(Optional[str], None , "Start of embedded TDoc data (eg. '/*')"),
 		"embedEnd"   : ParseOption(Optional[str], None , "End of embedded TDoc data (eg. '*/')"),
@@ -66,7 +67,7 @@ class ParseOptions:
 		elif name not in self.OPTIONS:
 			raise ValueError(f"No option {name}, pick any of {tuple(self.OPTIONS.keys())}")
 		else:
-			return self.options[name] if name in self.options else self.OPTIONS[name]
+			return self.options[name] if name in self.options else self.OPTIONS[name].default
 
 	def __setattr__( self, name, value ):
 		if name in ParseOptions.RESERVED:
@@ -140,6 +141,9 @@ class Parser:
 		self._indentMode  = mode
 		self._indentCount = count
 		self._indentPrefix = ('\t' if mode == IndentMode.TABS else ' ') * count
+		# The lastLineDepth is used to keep track of the depth of the last parsed
+		# line, which is used by the embedded parser.
+		self.lastLineDepth:int = 0
 		self.options.indentPrefix = self._indentPrefix
 
 	@property
@@ -163,30 +167,32 @@ class Parser:
 		self.customParserDepth = None
 		self.stack = []
 		yield from driver.onDocumentStart(self.options)
-		if self.options.document:
-			yield from driver.onNodeStart(None, self.options.document, None)
+		if self.options.rootNode:
+			yield from driver.onNodeStart(None, self.options.rootNode, None)
+			yield from driver.onNodeContentStart(None, self.options.rootNode, None)
 
 	def end( self, driver:"Emitter"  ):
 		"""Denotes the end of the parsing."""
 		while self.stack:
 			d = self.stack.pop()
 			yield from driver.onNodeEnd(d.ns, d.name, None)
-		if self.options.document:
-			yield from driver.onNodeEnd(None, self.options.document, None)
+		if self.options.rootNode:
+			yield from driver.onNodeEnd(None, self.options.rootNode, None)
 		yield from driver.onDocumentEnd()
 
 	def feed( self, line:str, driver:"Emitter"  ):
 		"""Freeds a line into the parser, which produces a directive for
 		the driver and may affect the state of the parser."""
 		# We get the line indentation, store it as `i`
-		i, l = self.getLineIndentation(line)
+		depth, l = self.getLineIndentation(line)
 		# NOTE: We use stopped as a way to exit the loop early, as we're
 		# using an iterator.
 		stopped = False
+		self.lastLineDepth = depth
 		# --- CUSTOM PARSER ---
 		if self.customParser:
 			# If we have CUSTOM PARSER, then we're going to feed RAW LINES
-			if i > self.customParserDepth:
+			if depth > self.customParserDepth:
 				# BRANCH: RAW_CONTENT
 				# That's a nested line, with an indentation greater than
 				# the indentation of the custom parser
@@ -206,7 +212,7 @@ class Parser:
 		elif self.isComment(l):
 			# BRANCH: COMMENT
 			# It's a COMMENT
-			yield from driver.onCommentLine(l[1:-1], i)
+			yield from driver.onCommentLine(l[1:-1], depth)
 		elif self.isAttribute(l):
 			# BRANCH: ATTRIBUTE
 			# It's an ATTRIBUTE
@@ -215,7 +221,7 @@ class Parser:
 		elif m := self.isNode(l):
 			# If is a node only if it's not too indented. If it is too
 			# indented, it's a text.
-			if i > self.depth + 1:
+			if depth > self.depth + 1:
 				# BRANCH: TEXT CONTENT
 				# The current line is TOO INDENTED (more than expected), so we consider
 				# it to be TEXT CONTENT
@@ -223,23 +229,23 @@ class Parser:
 			else:
 				# BRANCH: TEXT NODE
 				# Here we're sure it's a NODE
-				if i <= self.depth:
+				if depth <= self.depth:
 					# If it's DEDENTED, we need to pop the stack up until we
-					# reach a depth that's lower than i.
-					while self.stack and self.depth >= i:
+					# reach a depth that's lower than `depth`.
+					while self.stack and self.depth >= depth:
 						d = self.stack.pop()
 						# STEP: END PREVIOUS NODE
 						yield from driver.onNodeEnd(d.ns, d.name, None)
 				else:
 					# Here, the indentation must be stricly one more level
 					# up.
-					assert i == self.depth + 1
+					assert depth == self.depth + 1
 				# We parse the node line
 				ns, name, parser, attr, content = self.parseNodeLine(l, m)
-				self.stack.append(Parser.StackItem(i, ns, name))
+				self.stack.append(Parser.StackItem(depth, ns, name))
 				if parser:
 					self.customParser = m["parser"]
-					self.customParserDepth = i
+					self.customParserDepth = depth
 				# Now we have the node start
 				yield from driver.onNodeStart(ns, name, parser)
 				# Followed by the attributes, if any
@@ -477,6 +483,39 @@ class EventEmitter(Emitter):
 
 # -----------------------------------------------------------------------------
 #
+# NULL EMITTER
+#
+# -----------------------------------------------------------------------------
+
+class NullEmitter(Emitter):
+	"""A driver that outputs nothing."""
+
+	def onDocumentStart( self, options:ParseOptions ):
+		yield None
+
+	def onDocumentEnd( self ):
+		yield None
+
+	def onNodeStart( self, ns:Optional[str], name:str, process:Optional[str] ):
+		yield None
+
+	def onNodeEnd( self, ns:Optional[str], name:str, process:Optional[str] ):
+		yield None
+
+	def onAttribute( self, ns:Optional[str], name:str, value:Optional[str] ):
+		yield None
+
+	def onContentLine( self, text:str ):
+		yield None
+
+	def onRawContentLine( self, text:str ):
+		yield None
+
+	def onCommentLine( self, text:str, indent:int ):
+		yield None
+
+# -----------------------------------------------------------------------------
+#
 # TDOC DRIVER
 #
 # -----------------------------------------------------------------------------
@@ -657,12 +696,12 @@ class EmbeddedReader:
 	# TODO: Start, Line and end (from options)
 	def __init__( self,  parser:Parser ):
 		self.parser  = parser
-		self.node    = "code|tdoc"
 		self.shebang = "#!"
 
 	def read( self, iterable ):
 		in_content = False
 		embed_line = self.parser.options.embedLine or None
+		embed_node = self.parser.options.embedNode or "embed|raw"
 		for i,line in enumerate(iterable):
 			# NOTE: The options might be mutated by the parser, so we need
 			# to extract the prefix each time.
@@ -672,12 +711,13 @@ class EmbeddedReader:
 				in_content = False
 				yield line[len(embed_line):]
 			elif not in_content:
-				prefix = self.parser._indentPrefix * (self.parser.depth)
-				yield f"{prefix}{self.node}"
+				prefix = self.parser._indentPrefix * (self.parser.lastLineDepth)
+				if embed_node:
+					yield f"{prefix}{embed_node}"
 				yield f"{prefix}{line}"
 				in_content = True
 			else:
-				prefix = self.parser._indentPrefix * (self.parser.depth)
+				prefix = self.parser._indentPrefix * (self.parser.lastLineDepth)
 				yield f"{prefix}{line}"
 
 # -----------------------------------------------------------------------------
@@ -707,6 +747,7 @@ EMITTERS = {
 	"xml"    : XMLEmitter,
 	"events" : EventEmitter,
 	"tdoc"   : TDocEmitter,
+	"null"   : NullEmitter,
 }
 
 if __name__ == "__main__":

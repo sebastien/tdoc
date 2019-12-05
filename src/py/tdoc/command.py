@@ -15,13 +15,15 @@ def run( args:Optional[List[str]]=None, name="tdoc" ):
 	oparser.add_argument("-O", "--output-format", action="store", dest="outputFormat",
 		choices=list(EMITTERS.keys()), default=next(_ for _ in EMITTERS),
 		help=ParseOptions.OPTIONS["comments"].help)
-	oparser.add_argument("-D", "--with-document", action="store", dest="document", default="document",
-		help=ParseOptions.OPTIONS["document"].help)
+	oparser.add_argument("-r", "--root", action="store", dest="rootNode",
+		help=ParseOptions.OPTIONS["rootNode"].help)
 	oparser.add_argument("-c", "--with-comments", action="store_true", dest="comments",
 		help=ParseOptions.OPTIONS["comments"].help)
 	oparser.add_argument("-e", "--embed", action="store_true",
 		help="""TDoc is embedded in another language. Will try to autodetect
 		language, if `--embed-{start,line,end}` are not specified.""")
+	oparser.add_argument("-en", "--embed-node", type=str, default=None, dest="embedNode",
+		help=ParseOptions.OPTIONS["embedNode"].help)
 	oparser.add_argument("-es", "--embed-start", type=str, default=None, dest="embedStart",
 		help=ParseOptions.OPTIONS["embedStart"].help)
 	oparser.add_argument("-el", "--embed-line", type=str, default=None, dest="embedLine",
