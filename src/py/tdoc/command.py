@@ -34,9 +34,9 @@ def run( args:Optional[List[str]]=None, name="tdoc" ):
 	opts = oparser.parse_args(args=args)
 	# We extract parser optios
 	parse_options = ParseOptions(vars(opts))
-	driver = EMITTERS[opts.outputFormat]()
+	emitter = EMITTERS[opts.outputFormat]()
 	for path in opts.files:
-		res  = parsePath(path, options=parse_options, driver=driver)
+		res  = parsePath(path, options=parse_options, emitter=emitter)
 
 if __name__ == '__main__':
 	res = run()

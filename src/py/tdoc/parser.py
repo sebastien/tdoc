@@ -3,6 +3,10 @@ import re, sys, os, logging, json, xml.sax.saxutils
 from typing import Optional,Any,List,Union,Iterable,Iterator,Tuple
 from enum import Enum
 from collections import OrderedDict,namedtuple
+try:
+	import tlang.tree as tlang_tree
+except ImportError as e:
+	tlang_tree = None
 
 # TODO: The parser should yield its position (line, column) and a value
 # being either Skip, string, Warning, or Error
@@ -150,39 +154,39 @@ class Parser:
 	def depth( self ):
 		return self.stack[-1].depth if self.stack else 0
 
-	def parse( self, iterable:Iterable[str], driver:"Emitter" ):
-		"""Parses the given iterable strings, using the given driver to produce
+	def parse( self, iterable:Iterable[str], emitter:"Emitter" ):
+		"""Parses the given iterable strings, using the given emitter to produce
 		a result.
 
 		This is equivalent to a combination of `start()`, `feed()` and `end()`,
 		and is the preferred method to interact with a parser."""
-		yield from self.start(driver)
+		yield from self.start(emitter)
 		for line in iterable:
-			yield from self.feed(line, driver)
-		yield from self.end(driver)
+			yield from self.feed(line, emitter)
+		yield from self.end(emitter)
 
-	def start( self, driver:"Emitter" ):
+	def start( self, emitter:"Emitter" ):
 		"""The parser is stateful, and `start` initializes its state."""
 		self.customParser = None
 		self.customParserDepth = None
 		self.stack = []
-		yield from driver.onDocumentStart(self.options)
+		yield from emitter.onDocumentStart(self.options)
 		if self.options.rootNode:
-			yield from driver.onNodeStart(None, self.options.rootNode, None)
-			yield from driver.onNodeContentStart(None, self.options.rootNode, None)
+			yield from emitter.onNodeStart(None, self.options.rootNode, None)
+			yield from emitter.onNodeContentStart(None, self.options.rootNode, None)
 
-	def end( self, driver:"Emitter"  ):
+	def end( self, emitter:"Emitter"  ):
 		"""Denotes the end of the parsing."""
 		while self.stack:
 			d = self.stack.pop()
-			yield from driver.onNodeEnd(d.ns, d.name, None)
+			yield from emitter.onNodeEnd(d.ns, d.name, None)
 		if self.options.rootNode:
-			yield from driver.onNodeEnd(None, self.options.rootNode, None)
-		yield from driver.onDocumentEnd()
+			yield from emitter.onNodeEnd(None, self.options.rootNode, None)
+		yield from emitter.onDocumentEnd()
 
-	def feed( self, line:str, driver:"Emitter"  ):
+	def feed( self, line:str, emitter:"Emitter"  ):
 		"""Freeds a line into the parser, which produces a directive for
-		the driver and may affect the state of the parser."""
+		the emitter and may affect the state of the parser."""
 		# We get the line indentation, store it as `i`
 		depth, l = self.getLineIndentation(line)
 		# NOTE: We use stopped as a way to exit the loop early, as we're
@@ -196,12 +200,12 @@ class Parser:
 				# BRANCH: RAW_CONTENT
 				# That's a nested line, with an indentation greater than
 				# the indentation of the custom parser
-				yield from driver.onRawContentLine(self.stripLineIndentation(line[:-1], self.customParserDepth + 1))
+				yield from emitter.onRawContentLine(self.stripLineIndentation(line[:-1], self.customParserDepth + 1))
 				stopped = True
 			elif not l:
 				# BRANCH: RAW_CONTENT_EMPTY
 				# This is an empty line, so we log it as an EOL
-				yield from driver.onRawContentLine("")
+				yield from emitter.onRawContentLine("")
 			else:
 				# Otherwise, we're OUT of the custom parser
 				self.customParser = None
@@ -212,12 +216,12 @@ class Parser:
 		elif self.isComment(l):
 			# BRANCH: COMMENT
 			# It's a COMMENT
-			yield from driver.onCommentLine(l[1:-1], depth)
+			yield from emitter.onCommentLine(l[1:-1], depth)
 		elif self.isAttribute(l):
 			# BRANCH: ATTRIBUTE
 			# It's an ATTRIBUTE
 			ns, name, value = self.parseAttributeLine(l[:-1])
-			yield from self.onAttribute(driver, ns, name, value)
+			yield from self.onAttribute(emitter, ns, name, value)
 		elif m := self.isNode(l):
 			# If is a node only if it's not too indented. If it is too
 			# indented, it's a text.
@@ -225,7 +229,7 @@ class Parser:
 				# BRANCH: TEXT CONTENT
 				# The current line is TOO INDENTED (more than expected), so we consider
 				# it to be TEXT CONTENT
-				yield from driver.onContentLine(l[:-1])
+				yield from emitter.onContentLine(l[:-1])
 			else:
 				# BRANCH: TEXT NODE
 				# Here we're sure it's a NODE
@@ -235,7 +239,7 @@ class Parser:
 					while self.stack and self.depth >= depth:
 						d = self.stack.pop()
 						# STEP: END PREVIOUS NODE
-						yield from driver.onNodeEnd(d.ns, d.name, None)
+						yield from emitter.onNodeEnd(d.ns, d.name, None)
 				else:
 					# Here, the indentation must be stricly one more level
 					# up.
@@ -247,22 +251,22 @@ class Parser:
 					self.customParser = m["parser"]
 					self.customParserDepth = depth
 				# Now we have the node start
-				yield from driver.onNodeStart(ns, name, parser)
+				yield from emitter.onNodeStart(ns, name, parser)
 				# Followed by the attributes, if any
 				attr = list(attr)
 				for ns, name, value in attr:
-					yield from self.onAttribute(driver, ns, name, value)
-				yield from driver.onNodeContentStart(ns, name, parser)
+					yield from self.onAttribute(emitter, ns, name, value)
+				yield from emitter.onNodeContentStart(ns, name, parser)
 				# And then the first line of content, if any
 				if content is not None:
-					yield from driver.onContentLine(content)
+					yield from emitter.onContentLine(content)
 		elif self.isExplicitContent(l):
-			yield from driver.onContentLine(l[1:-1])
+			yield from emitter.onContentLine(l[1:-1])
 		else:
 			# FIXME: See feature-whitespace, there's a problem there
 			text = self.stripLineIndentation(line,self.depth)[:-1]
 			if text:
-				yield from driver.onContentLine(text)
+				yield from emitter.onContentLine(text)
 
 	# =========================================================================
 	# PREDICATES
@@ -288,7 +292,7 @@ class Parser:
 	# HANDLERS
 	# =========================================================================
 
-	def onAttribute( self, driver, ns:str, name:str, value:Any ):
+	def onAttribute( self, emitter, ns:str, name:str, value:Any ):
 		if ns == "tdoc" and name == "indent":
 			v = dict( (k,v) for ns,k,v in self.parseAttributes(" " + value))
 			if "spaces" in v:
@@ -298,7 +302,7 @@ class Parser:
 			else:
 				raise SyntaxError(f"tdoc:indent expects `tabs` or `spaces=N` as value, got: `{value}`")
 		else:
-			yield from driver.onAttribute(ns, name, value)
+			yield from emitter.onAttribute(ns, name, value)
 
 	# =========================================================================
 	# SPECIFIC PARSERS
@@ -404,7 +408,7 @@ class Parser:
 # -----------------------------------------------------------------------------
 
 class Emitter:
-	"""An abstract interface for the parser driver. The driver yields
+	"""An abstract interface for the parser emitter. The emitter yields
 	values that are then handled by a writer. In other words, it transforms
 	the stream of events produced by the parser in a stream of values to
 	be written."""
@@ -451,7 +455,7 @@ class Emitter:
 # -----------------------------------------------------------------------------
 
 class EventEmitter(Emitter):
-	"""A driver that outputs an event stream."""
+	"""A emitter that outputs an event stream."""
 
 	def __init__( self ):
 		self.options = None
@@ -488,7 +492,7 @@ class EventEmitter(Emitter):
 # -----------------------------------------------------------------------------
 
 class NullEmitter(Emitter):
-	"""A driver that outputs nothing."""
+	"""A emitter that outputs nothing."""
 
 	def onDocumentStart( self, options:ParseOptions ):
 		yield None
@@ -522,7 +526,7 @@ class NullEmitter(Emitter):
 
 # FIXME: Deal with empty lines
 class TDocEmitter(Emitter):
-	"""A driver that outputs a normalized TDoc document."""
+	"""A emitter that outputs a normalized TDoc document."""
 
 	RE_QUOTE = re.compile("[\" ]")
 
@@ -580,7 +584,7 @@ class TDocEmitter(Emitter):
 # -----------------------------------------------------------------------------
 
 class XMLEmitter(Emitter):
-	"""A driver that emits an XML-serialized document (as a text string)."""
+	"""A emitter that emits an XML-serialized document (as a text string)."""
 
 	def __init__( self ):
 		super().__init__()
@@ -652,6 +656,55 @@ class XMLEmitter(Emitter):
 
 # -----------------------------------------------------------------------------
 #
+# TLANG EMITTER
+#
+# -----------------------------------------------------------------------------
+
+class TLangEmitter(Emitter):
+	"""A emitter that outputs nothing."""
+
+	def onDocumentStart( self, options:ParseOptions ):
+		self.root  = tlang_tree.Node(options.rootNode or "document")
+		self.node  = self.root
+		yield None
+
+	def onDocumentEnd( self ):
+		yield self.root
+
+	def onNodeStart( self, ns:Optional[str], name:str, process:Optional[str] ):
+		name = ns + ":" + name if ns else name
+		node = tlang_tree.Node(name)
+		self.node.append(node)
+		self.node = node
+		yield None
+
+	def onNodeEnd( self, ns:Optional[str], name:str, process:Optional[str] ):
+		self.node = self.node.parent
+		yield None
+
+	def onAttribute( self, ns:Optional[str], name:str, value:Optional[str] ):
+		name = ns + ":" + name if ns else name
+		if self.node:
+			self.node.attr(name, value)
+		else:
+			# TODO: Should warn about that
+			pass
+		yield None
+
+	def onContentLine( self, text:str ):
+		self.node.append(tlang_tree.Node("#text").attr("value", text))
+		yield None
+
+	def onRawContentLine( self, text:str ):
+		self.node.append(tlang_tree.Node("#text").attr("value", text).attr("raw", True))
+		yield None
+
+	def onCommentLine( self, text:str, indent:int ):
+		self.node.append(tlang_tree.Node("#comment").attr("value", text).attr("indent", indent))
+		yield None
+
+# -----------------------------------------------------------------------------
+#
 # WRITER 
 #
 # -----------------------------------------------------------------------------
@@ -665,6 +718,7 @@ class Writer:
 
 	def write( self, iterable ):
 		"""Writes the iterable elements to the output stream."""
+		res = None
 		for _ in iterable:
 			if _ is None:
 				pass
@@ -676,12 +730,26 @@ class Writer:
 				self.out.write(json.dumps(_))
 				self.out.write("\n")
 
+	def __call__( self, out ):
+		self.out = out
+		return self
+
 class NullWriter(Writer):
 	"""Absorbs the output."""
 
 	def _write( self, iterable ):
 		for _ in iterable:
 			pass
+
+class ValueWriter(Writer):
+	"""Returns the last value yielded by the emitter."""
+
+	def write( self, iterable ):
+		result = None
+		for _ in iterable:
+			if _ is not None:
+				result = _
+		return result
 
 # -----------------------------------------------------------------------------
 #
@@ -720,28 +788,29 @@ class EmbeddedReader:
 				prefix = self.parser._indentPrefix * (self.parser.lastLineDepth)
 				yield f"{prefix}{line}"
 
+
 # -----------------------------------------------------------------------------
 #
 # HIGH-LEVEL API
 #
 # -----------------------------------------------------------------------------
 
-def parseIterable( iterable, out=sys.stdout, options=ParseOptions(), driver=Emitter.GetDefault() ):
+def parseIterable( iterable, out=sys.stdout, options=ParseOptions(), emitter=Emitter.GetDefault(), writer=Writer()):
 	parser = Parser(options)
 	if options.isEmbedded:
 		iterable = EmbeddedReader(parser).read(_ for _ in iterable)
-	return Writer(out).write(parser.parse(iterable, driver))
+	return writer(out).write(parser.parse(iterable, emitter))
 
-def parseString( text:str, out=sys.stdout, options=ParseOptions(), driver=Emitter.GetDefault() ):
+def parseString( text:str, out=sys.stdout, options=ParseOptions(), emitter=Emitter.GetDefault(), writer=Writer() ):
 	with open(path) as f:
-		return parseIterable( (_[:-1] for _ in text.split("\n")), out=out, options=options, driver=driver)
+		return parseIterable( (_[:-1] for _ in text.split("\n")), out=out, options=options, emitter=emitter, writer=writer)
 
-def parsePath( path:str, out=sys.stdout, options=ParseOptions(), driver=Emitter.GetDefault() ):
+def parsePath( path:str, out=sys.stdout, options=ParseOptions(), emitter=Emitter.GetDefault(), writer=Writer() ):
 	with open(path) as f:
-		return parseIterable( f.readlines(), out=out, options=options, driver=driver)
+		return parseIterable( f.readlines(), out=out, options=options, emitter=emitter, writer=writer)
 
-def parseStream( stream, out=sys.stdout, options=ParseOptions(), driver=Emitter.GetDefault() ):
-	return parseIterable( stream.readlines(), out=out, options=options, driver=driver)
+def parseStream( stream, out=sys.stdout, options=ParseOptions(), emitter=Emitter.GetDefault(), writer=Writer() ):
+	return parseIterable( stream.readlines(), out=out, options=options, emitter=emitter, writer=writer)
 
 EMITTERS = {
 	"xml"    : XMLEmitter,
