@@ -4,7 +4,7 @@
 import sys, os
 from distutils.core import setup
 
-VERSION     = os.popen("""grep __version__ src/tdoc/py/__init__.py | head -n1 | cut -d'"' -f2""").read().split("\n")[0]
+VERSION     = os.popen("""grep __version__ src/py/tdoc/__init__.py | head -n1 | cut -d'"' -f2""").read().split("\n")[0]
 SUMMARY     = "Tree Document Format"
 DESCRIPTION = """\
 TDoc is a text format to write XML-compatible trees.
@@ -17,7 +17,7 @@ TDoc is a text format to write XML-compatible trees.
 # ------------------------------------------------------------------------------
 
 setup(
-	name        = "tdoc",
+	name        = "tlang-tdoc",
 	version     = VERSION,
 	author      = "Sebastien Pierre", author_email = "sebastien.pierre@gmail.com",
 	description = SUMMARY, long_description = DESCRIPTION,
