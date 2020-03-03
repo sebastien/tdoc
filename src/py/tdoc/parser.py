@@ -788,7 +788,6 @@ class EmbeddedReader:
 				prefix = self.parser._indentPrefix * (self.parser.lastLineDepth)
 				yield f"{prefix}{line}"
 
-
 # -----------------------------------------------------------------------------
 #
 # HIGH-LEVEL API

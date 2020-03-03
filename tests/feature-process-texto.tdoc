@@ -1,0 +1,5 @@
+document
+	body|texto
+		This tests that we can write [texto](//github.com/sebastien/texto)
+		content in TDoc.
+
