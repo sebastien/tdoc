@@ -27,6 +27,7 @@ setup(
 	download_url= f"https://hg.sr.ht/~sebastien/tdoc/archive/{VERSION}.tar.gz" ,
 	package_dir = { "": "src/py" },
 	packages    = ["tdoc"],
+	scripts     = ["bin/tdoc"],
 	classifiers = [
 	"Development Status :: 4 - Beta",
 	"Environment :: Console",
