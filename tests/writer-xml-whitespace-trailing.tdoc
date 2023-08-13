@@ -1,0 +1,12 @@
+#!/bin/env tdoc --run=test
+#run
+#	tdoc -Oxml
+#doc|texto
+#	The last line of a raw element should not have a trailing EOL
+#expect
+#	<?xml version="1.0"?>
+#	<user><experiment><code>projectx.api.API.state.userObject.value.setExperiment("default");</code></experiment></user>
+experiment
+	code|raw
+		projectx.api.API.state.userObject.value.setExperiment("default");
+# EOF

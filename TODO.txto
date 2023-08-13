@@ -1,0 +1,22 @@
+Bugs::
+
+[ ] embedded: make sure that nesting content works
+[ ] xml: it seems like `->` is not expanded to `-&gt;`
+[ ] embedded: empty lines are skipped in embedded content
+
+Maintenance:
+
+[ ] refactor: split parser into {parser,emitter}
+
+Features::
+
+[ ] syntax: attribute=format"VALUE" so that we have data=json"[1,2,3,4]"
+[ ] parser: support default processor @tdoc:process element=name with=texto
+[ ] cli: --list-processors -l argument to list the processors
+[ ] processor: texto
+[ ] processor: markdown
+[ ] processor: rst
+[ ] processor: json
+[ ] processor: hjson
+[ ] processor: plantuml
+[ ] processor: tree-sitter?

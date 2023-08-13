@@ -1,0 +1,38 @@
+title: An example of a TDoc document
+@author Sébastien Pierre
+@created 2019-10-19
+
+
+h1: First section
+
+ul:
+	li
+		:One
+	two|pre
+		Two
+		Three
+
+section|markdown
+	This is a section where I'm free do embed some markdown
+
+	- You can make lists
+	- With many items
+
+	You can use *inline* **markup** and [links](http://markdown.org)
+
+
+
+section
+	title: Code examples
+	code|javascript
+		let echo = function(message){
+			console.log("Echo:", message);
+		}
+		echo(message)
+		console.log("Echo:", message);
+
+	code|python
+		import os
+		os.path()
+
+# EOF

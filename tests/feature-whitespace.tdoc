@@ -1,0 +1,26 @@
+#!/bin/env tdoc --run=test
+#run
+#	tdoc -Oxml --no-comment
+#doc
+#	Ensures that the whitespace is properly handled
+#expect
+#	<?xml version="1.0"?>
+#	part 1
+#	part 2
+#	part 3<p>part 4
+#	part 5
+#	part 6</p><p>part 7
+#	part 8
+#		part 9</p>
+part 1
+part 2
+part 3
+p
+	part 4
+	part 5
+	part 6
+p
+	part 7
+	part 8
+		part 9
+# EOF

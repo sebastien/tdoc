@@ -1,0 +1,6 @@
+@tdoc:indent spaces=2
+ul
+  li
+    Item A
+  li
+    Item B

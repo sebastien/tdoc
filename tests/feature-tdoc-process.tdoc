@@ -1,0 +1,5 @@
+@tdoc:process element=description as=texto
+foo|texto
+	Here is a *texto* content
+description
+	Here is _another_ *texto* content.

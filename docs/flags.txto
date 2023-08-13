@@ -1,0 +1,27 @@
+== TDoc flags
+
+Attributes declared at the top level and prefixed with the `tdoc:` namespace
+will act as directives that impact the parsing process of the rest of the
+document, and won't be included in the output.
+
+
+Specifying indentation
+======================
+
+The  `@tdoc:indent MODE[=COUNT]` specifies how indentation will be interpreted starting on the next line. `MODE` can be `tabs` or `spaces` and `COUNT] is a positive integer.
+
+```
+@tdoc:indent spaces=2
+@tdoc:indent tabs
+```
+
+Setting default processors
+==========================
+
+The `@tdoc:process NODE=PROCESSOR …` defines a mapping between node names and processor types.
+
+```
+@tdoc:process text=markdown uml=plantuml
+```
+
+# EOF

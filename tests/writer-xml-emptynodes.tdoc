@@ -1,0 +1,11 @@
+#!/bin/env tdoc --run=test
+#run
+#	tdoc -Oxml
+#expect
+nonempty
+	There is some text
+nonempty: text
+empty
+empty name=
+empty name=value
+# EOF
