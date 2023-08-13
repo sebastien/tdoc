@@ -1,7 +1,14 @@
 import sys, argparse
-from typing import Optional
-from tdoc.parser import EMITTERS, ParseOptions, parsePath
+from typing import Optional, Type, Any
+from tdoc.parser import EMITTERS, Emitter, ParseOptions, parsePath
 import os
+
+
+def doc(t: Type, field: str) -> Optional[str]:
+    if field in t.__annotations__:
+        return f"{t.__annotations__[field]}"
+    else:
+        return None
 
 
 def run(args: Optional[list[str]] = None, name="tdoc") -> int:
@@ -26,21 +33,21 @@ def run(args: Optional[list[str]] = None, name="tdoc") -> int:
         dest="outputFormat",
         choices=list(EMITTERS.keys()),
         default=next(_ for _ in EMITTERS),
-        help=ParseOptions.OPTIONS["comments"].help,
+        help=doc(ParseOptions, "outputFormat"),
     )
     oparser.add_argument(
         "-r",
         "--root",
         action="store",
         dest="rootNode",
-        help=ParseOptions.OPTIONS["rootNode"].help,
+        help=doc(ParseOptions, "rootNode"),
     )
     oparser.add_argument(
         "-c",
         "--with-comments",
         action="store_true",
         dest="comments",
-        help=ParseOptions.OPTIONS["comments"].help,
+        help=doc(ParseOptions, "comments"),
     )
     oparser.add_argument(
         "-e",
@@ -55,7 +62,7 @@ def run(args: Optional[list[str]] = None, name="tdoc") -> int:
         type=str,
         default=None,
         dest="embedNode",
-        help=ParseOptions.OPTIONS["embedNode"].help,
+        help=doc(ParseOptions, "embedNode"),
     )
     oparser.add_argument(
         "-es",
@@ -63,7 +70,7 @@ def run(args: Optional[list[str]] = None, name="tdoc") -> int:
         type=str,
         default=None,
         dest="embedStart",
-        help=ParseOptions.OPTIONS["embedStart"].help,
+        help=doc(ParseOptions, "embedStart"),
     )
     oparser.add_argument(
         "-el",
@@ -71,7 +78,7 @@ def run(args: Optional[list[str]] = None, name="tdoc") -> int:
         type=str,
         default=None,
         dest="embedLine",
-        help=ParseOptions.OPTIONS["embedLine"].help,
+        help=doc(ParseOptions, "embedLine"),
     )
     oparser.add_argument(
         "-ee",
@@ -79,13 +86,15 @@ def run(args: Optional[list[str]] = None, name="tdoc") -> int:
         type=str,
         default=None,
         dest="embedEnd",
-        help=ParseOptions.OPTIONS["embedEnd"].help,
+        help=doc(ParseOptions, "embedLEnd"),
     )
     # We create the parse and register the options
     opts = oparser.parse_args(args=args)
     # We extract parser optios
-    parse_options = ParseOptions(vars(opts))
-    emitter = EMITTERS[opts.outputFormat]()
+    parse_options = ParseOptions(
+        **{k: v for k, v in vars(opts).items() if k not in ("files", "outputFormat")}
+    )
+    emitter: Emitter[Any] = EMITTERS[opts.outputFormat]()
     for path in opts.files:
         parsePath(path, options=parse_options, emitter=emitter)
     return 0

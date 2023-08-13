@@ -8,7 +8,7 @@ from typing import (
     Generic,
     TypeVar,
     Type,
-    ClassVar,
+    Annotated,
     NamedTuple,
     cast,
 )
@@ -58,86 +58,42 @@ class IndentMode(Enum):
     SPACES = "SPACES"
 
 
+class Doc(NamedTuple):
+    value: str
+
+
+@dataclass
 class ParseOptions:
-    """Define options for parsers, readers and writers."""
-
-    TABS: ClassVar[str] = "tabs"
-    SPACES: ClassVar[str] = "spaces"
-
-    RESERVED: ClassVar[list[str]] = ["OPTIONS", "options", "indentPrefix"]
-
-    OPTIONS: ClassVar[dict[str, ParseOption]] = {
-        "comments": ParseOption(bool, False, "Includes comments in the output"),
-        "rootNode": ParseOption(str, None, "Tag name for the root node (optinal)"),
-        "embed": ParseOption(bool, False, "Turns on embedded mode"),
-        "embedNode": ParseOption(
-            str, "embed", "Tag name for embedded data in embedded mode"
-        ),
-        "embedLine": ParseOption(
-            str, None, "Line prefix for embedded TDoc data (eg. '#')"
-        ),
-        "embedStart": ParseOption(str, None, "Start of embedded TDoc data (eg. '/*')"),
-        "embedEnd": ParseOption(str, None, "End of embedded TDoc data (eg. '*/')"),
-    }
-
-    def __init__(self, options=None):
-        self.options = {"indentPrefix": ""}
-        self.merge(options)
+    comments: Annotated[bool, Doc("Includes comments in the output")] = False
+    rootNode: Annotated[Optional[str], Doc("Tag name for the root node")] = None
+    embed: Annotated[bool, Doc("Turns on embedded mode")] = False
+    indentPrefix: Annotated[str, Doc("Indentation prefix")] = ""
+    embedNode: Annotated[
+        str, Doc("Tag name for embedded data in embedded mode")
+    ] = "embed"
+    embedLine: Annotated[
+        Optional[str], Doc("Line prefix for embedded TDoc data (eg. '#')")
+    ] = None
+    embedStart: Annotated[
+        Optional[str], Doc("Start of embedded TDoc data (eg. '/*')")
+    ] = None
+    embedEnd: Annotated[
+        Optional[str], Doc("End of embedded TDoc data (eg. '*/')")
+    ] = None
 
     @property
     def isEmbedded(self):
         return self.embed or self.embedLine or self.embedStart or self.embedEnd
 
-    def merge(self, options):
-        if options:
-            for k, v in options.items():
-                if k in self.OPTIONS:
-                    setattr(self, k, v)
-        return self
 
-    def __getattr__(self, name):
-        if name in ParseOptions.RESERVED:
-            return object.__getattribute__(self, name)
-        elif name not in self.OPTIONS:
-            raise ValueError(
-                f"No option {name}, pick any of {tuple(self.OPTIONS.keys())}"
-            )
-        else:
-            return (
-                self.options[name]
-                if name in self.options
-                else self.OPTIONS[name].default
-            )
-
-    def __setattr__(self, name, value):
-        if name in ParseOptions.RESERVED:
-            object.__setattr__(self, name, value)
-        elif name not in self.OPTIONS:
-            raise ValueError(
-                f"No option {name}, pick any of {tuple(self.OPTIONS.keys())}"
-            )
-        else:
-            expected_type = self.OPTIONS[name].type
-            # FIXME: We should test using generics
-            if not isinstance(value, expected_type):
-                raise ValueError(
-                    f"Option {name} should be {expected_type}, got {type(value)}: {value}"
-                )
-            else:
-                self.options[name] = value
-
-    def __repr__(self):
-        return repr(self.options)
-
-
+@dataclass
 class ParseError:
     """Define a parse error, that can be relayed by the writer."""
 
-    def __init__(self, line: int, char: int, message: str, length: int = 0):
-        self.line = line
-        self.char = char
-        self.message = message
-        self.length = length
+    line: int
+    char: int
+    message: str
+    length: int = 0
 
     def __str__(self):
         return f"Syntax error at {self.line}:{self.char}: {self.message}"
@@ -277,7 +233,7 @@ class Parser:
             # It's an ATTRIBUTE
             ns, name, value = self.parseAttributeLine(l[:-1])
             yield from self.onAttribute(emitter, ns, name, value)
-        elif m := self.isNode(l):
+        elif match := self.matchNode(l):
             # If is a node only if it's not too indented. If it is too
             # indented, it's a text.
             if depth > self.depth + 1:
@@ -303,10 +259,10 @@ class Parser:
                             f"Parsing depth should be {self.depth + 1}, got {depth}"
                         )
                 # We parse the node line
-                ns, name, parser, attr, content = self.parseNodeLine(l, m)
+                ns, name, parser, attr, content = self.parseNodeLine(l, match)
                 self.stack.append(StackItem(depth, ns, name))
                 if parser:
-                    self.customParser = m["parser"]
+                    self.customParser = match["parser"]
                     self.customParserDepth = depth
                 # Now we have the node start
                 yield from emitter.onNodeStart(ns, name, parser)
@@ -338,9 +294,9 @@ class Parser:
         "Tells if the given line is an EXPLICIT CONTENT line." ""
         return bool(line and line[0] == ":")
 
-    def isNode(self, line: str) -> bool:
+    def matchNode(self, line: str) -> Optional[re.Match[str]]:
         """Tells if this line is node line"""
-        return bool(self.RE_NODE.match(line))
+        return self.RE_NODE.match(line)
 
     def isAttribute(self, line: str) -> bool:
         """Tells if this line is attribute line"""
@@ -937,7 +893,7 @@ def parsePath(
     path: str,
     out=sys.stdout,
     options=ParseOptions(),
-    emitter=Emitter.GetDefault(),
+    emitter: Emitter = Emitter.GetDefault(),
     writer=Writer(),
 ):
     with open(path) as f:
@@ -950,7 +906,7 @@ def parseStream(
     stream,
     out=sys.stdout,
     options=ParseOptions(),
-    emitter=Emitter.GetDefault(),
+    emitter: Emitter = Emitter.GetDefault(),
     writer=Writer(),
 ):
     return parseIterable(
