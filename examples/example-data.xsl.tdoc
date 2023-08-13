@@ -1,0 +1,17 @@
+xsl:stylesheet version=1.0 xmlns:xsl=http://www.w3.org/1999/XSL/Transform
+	# Match the root element
+	xsl:template match=/
+		html
+			head
+				title: Sample XSLT Transformation
+			body
+				h1
+					xsl:value-of select=data/title
+				ul
+					xsl:apply-templates select=data/item
+
+	# Match 'item' elements
+	xsl:template match="data/item"
+		li
+			xsl:value-of select=.
+# EOF

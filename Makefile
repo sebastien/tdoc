@@ -9,7 +9,8 @@ PATH_SOURCES_PY=src/py
 SOURCES_PY:=$(wildcard $(PATH_SOURCES_PY)/*.py $(PATH_SOURCES_PY)/*/*.py $(PATH_SOURCES_PY)/*/*/*.py $(PATH_SOURCES_PY)/*/*/*/*.py)
 MODULES_PY:=$(filter-out %/__main__,$(filter-out %/__init__,$(SOURCES_PY:$(PATH_SOURCES_PY)/%.py=%)))
 MANIFEST=$(SOURCES_PY) $(wildcard *.py api/*.* AUTHORS* README* LICENSE*)
-PRODUCT=MANIFEST
+BUILD_ALL?=
+PRODUCT_ALL=MANIFEST
 PYTHON_VERSION?=3.11
 PYTHON?=python$(PYTHON_VERSION)
 FLAKE8?=flake8
@@ -22,12 +23,18 @@ PYANALYZE?=pyanalyze
 
 PYTHON_MODULE=$(notdir $(firstword $(wildcard $(PATH_SOURCES_PY)/*)))
 
-all: $(PRODUCT)
+# TODO: Should test the existence of $1
+cmd=if [ -z "$$(which '$1' 2> /dev/null)" ]; then echo "ERR: Could not find command $1"; exit 1; fi; $1
 
-release: $(PRODUCT)
-	@hg commit -a -m "Release $(VERSION)" ; true
-	@hg tag "$(VERSION)" ; true
-	@hg push --all ; true
+include src/mk/defs.mk
+
+all: $(PRODUCT_ALL) $(BUILD_ALL)
+
+
+build: $(BUILD_ALL)
+
+
+release: $(PRODUCT_ALL)
 	@python setup.py clean sdist register upload
 
 clean:
@@ -78,4 +85,5 @@ print-%:
 
 .ONESHELL:
 
+include src/mk/rules.mk
 #EOF

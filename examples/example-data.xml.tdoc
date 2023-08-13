@@ -1,0 +1,6 @@
+pi:xml-stylesheet type=text/xsl href=stylesheet.xsl
+data
+	title: Sample List
+	item: Item 1
+	item: Item 2
+	item: Item 3

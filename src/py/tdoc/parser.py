@@ -102,41 +102,59 @@ class ParseError:
 ParseResult = Union[None, ParseError, str]
 
 
+class ParsedAttribute(NamedTuple):
+    ns: Optional[str]
+    name: str
+    value: str
+
+
+class ParsedNode(NamedTuple):
+    ns: Optional[str]
+    name: str
+    value: str
+    attributes: list[ParsedAttribute]
+    content: str
+
+
 class StackItem(NamedTuple):
     depth: int
     ns: str
     name: str
 
 
+NAME = r"[A-Za-z0-9\-_]+"
+STR_SQ = r"'(\\'|[^'])*'"
+STR_DQ = r'"(\\"|[^"])*"'
+
+# A value is either a quoted string or a sequence without spaces
+VALUE = f"({STR_SQ}|{STR_DQ}|" r"[^ \t\r\n]+)"
+INLINE_ATTR = f"({NAME}:)?{NAME}={VALUE}"
+
+# Attributes are like NAME=VALUE
+# FIXME: Not sure where this is used, might be a @attr name=value
+RE_ATTR = re.compile(f"[ \t]*((?P<ns>{NAME}):)?(?P<name>{NAME})=(?P<value>{VALUE})?")
+RE_COMMENT = re.compile(r"^\t*#.*")
+
+# Nodes are like NS:NAME|PARSER ATTR=VALUE: CONTENT
+RE_NODE = re.compile(
+    f"^((?P<ns>{NAME}):)?(?P<name>{NAME})"
+    r"(#"
+    f"(?P<id>{NAME})"
+    r")?(\|"
+    f"(?P<parser>{NAME}))?"
+    f"(?P<attrs>([ ]+{INLINE_ATTR})*)?(: (?P<content>.*))?$"
+)
+
 # TODO: The parser should have a stack
 class Parser:
     """The TDoc parser is implemented as a straightforward line-by-line
     parser with an event-based (SAX-like) interface.
 
-    The parser uses iterable consistently as an abstraction over multiple
+    The parser uses iterators consistently as an abstraction over multiple
     sources and makes it possible to pause/resume parsing.
     """
 
-    DATA_NODE = 1
-    DATA_ATTR = 2
-    DATA_CONTENT = 3
-    DATA_RAW = 4
-
-    NAME = "[A-Za-z0-9-_]+"
-    STR_SQ = "'(\\'|[^'])+'"
-    STR_DQ = '"(\\"|[^"])+"'
-    # A value is either a quoted string or a sequence without spaces
-    VALUE = f"({STR_SQ}|{STR_DQ}|[^ ]+)"
-    INLINE_ATTR = f"{NAME}={VALUE}"
-    # Attributes are like NAME=VALUE
-    # FIXME: Not sure where this is used, might be a @attr name=value
-    RE_ATTR = re.compile(f" ((?P<ns>{NAME}):)?(?P<name>{NAME})=(?P<value>{VALUE})?")
-    # Nodes are like NS:NAME|PARSER ATTR=VALUE: CONTENT
-    RE_NODE = re.compile(
-        f"^((?P<ns>{NAME}):)?(?P<name>{NAME})(\#(?P<id>{NAME}))?(\|(?P<parser>{NAME}))?(?P<attrs>( {INLINE_ATTR})*)?(: (?P<content>.*))?$"
-    )
-
-    def __init__(self, options: ParseOptions):
+    def __init__(self, options: ParseOptions = ParseOptions()):
         # TODO: These should be moved into the stack
         self.customParser: Optional[str] = None
         self.customParserDepth: Optional[int] = None
@@ -171,7 +189,7 @@ class Parser:
             yield from self.feed(line, emitter)
         yield from self.end(emitter)
 
-    def start(self, emitter: "Emitter"):
+    def start(self, emitter: "Emitter[T]") -> Iterator[T]:
         """The parser is stateful, and `start` initializes its state."""
         self.customParser = None
         self.customParserDepth = None
@@ -182,7 +200,7 @@ class Parser:
             yield from emitter.onNodeStart(None, self.options.rootNode, None)
             yield from emitter.onNodeContentStart(None, self.options.rootNode, None)
 
-    def end(self, emitter: "Emitter"):
+    def end(self, emitter: "Emitter[T]") -> Iterator[T]:
         """Denotes the end of the parsing."""
         while self.stack:
             d = self.stack.pop()
@@ -191,8 +209,8 @@ class Parser:
             yield from emitter.onNodeEnd(None, self.options.rootNode, None)
         yield from emitter.onDocumentEnd()
 
-    def feed(self, line: str, emitter: "Emitter"):
-        """Freeds a line into the parser, which produces a directive for
+    def feed(self, line: str, emitter: "Emitter[T]") -> Iterator[T]:
+        """Feeds a line into the parser, which produces a directive for
         the emitter and may affect the state of the parser."""
         # We get the line indentation, store it as `i`
         depth, l = self.getLineIndentation(line)
@@ -259,7 +277,7 @@ class Parser:
                             f"Parsing depth should be {self.depth + 1}, got {depth}"
                         )
                 # We parse the node line
-                ns, name, parser, attr, content = self.parseNodeLine(l, match)
+                ns, name, parser, attr, content = self.parseNode(match)
                 self.stack.append(StackItem(depth, ns, name))
                 if parser:
                     self.customParser = match["parser"]
@@ -288,7 +306,7 @@ class Parser:
 
     def isComment(self, line: str) -> bool:
         "Tells if the given line is a COMMENT line." ""
-        return bool(line and line[0] == "#")
+        return bool(RE_COMMENT.match(line))
 
     def isExplicitContent(self, line: str) -> bool:
         "Tells if the given line is an EXPLICIT CONTENT line." ""
@@ -296,7 +314,7 @@ class Parser:
 
     def matchNode(self, line: str) -> Optional[re.Match[str]]:
         """Tells if this line is node line"""
-        return self.RE_NODE.match(line)
+        return RE_NODE.match(line)
 
     def isAttribute(self, line: str) -> bool:
         """Tells if this line is attribute line"""
@@ -306,7 +324,9 @@ class Parser:
     # HANDLERS
     # =========================================================================
 
-    def onAttribute(self, emitter, ns: Optional[str], name: str, value: Any):
+    def onAttribute(
+        self, emitter: "Emitter[T]", ns: Optional[str], name: str, value: Any
+    ) -> Iterator[T]:
         if ns == "tdoc" and name == "indent":
             v = dict((k, v) for ns, k, v in self.parseAttributes(" " + value))
             if "spaces" in v:
@@ -324,15 +344,15 @@ class Parser:
     # SPECIFIC PARSERS
     # =========================================================================
 
-    def parseNodeLine(
-        self, line: str, match: re.Match[str]
+    def parseNode(
+        self, match: re.Match[str]
     ) -> tuple[str, str, str, list[tuple[Optional[str], str, str]], str]:
-        attrs: list[tuple[Optional[str], str, str]] = [
+        attrs: list[ParsedAttribute] = [
             _ for _ in self.parseAttributes(match.group("attrs"))
         ]
         nid = match.group("id")
         if nid:
-            l: list[tuple[Optional[str], str, str]] = [(None, "id", nid)]
+            l: list[ParsedAttribute] = ParsedAttribute(None, "id", nid)
             for _ in list(attrs):
                 if _[1] == "id" and _[0] is None:
                     # TODO: We might want to issue a warning there
@@ -340,7 +360,7 @@ class Parser:
                 else:
                     l.append(_)
             attrs = l
-        return (
+        return ParsedNode(
             cast(str, match.group("ns")),
             cast(str, match.group("name")),
             cast(str, match.group("parser")),
@@ -348,7 +368,7 @@ class Parser:
             cast(str, match.group("content")),
         )
 
-    def parseAttributes(self, line: str) -> Iterator[tuple[Optional[str], str, str]]:
+    def parseAttributes(self, line: str) -> Iterator[ParsedAttribute]:
         """Parses the attributes and returns a stream of `(key,value)` pairs."""
         # We remove the trailing spaces.
         while line and line[-1] in "\n \t":
@@ -358,7 +378,7 @@ class Parser:
         # Where value can be unquoted, single quoted or double quoted,
         # with \" or \' to escape quotes.
         o = 0
-        while m := self.RE_ATTR.match(line, o):
+        while m := RE_ATTR.match(line, o):
             v = m.group("value")
             if not v:
                 w = v
@@ -376,7 +396,7 @@ class Parser:
                     w = v[1:-1].replace("\\'", "'")
                 else:
                     w = v
-            yield (m.group("ns"), m.group("name"), w or "")
+            yield ParsedAttribute(m.group("ns"), m.group("name"), w or "")
             o = m.end()
 
     def parseAttributeLine(self, line):
@@ -660,7 +680,10 @@ class XMLEmitter(Emitter):
     def onNodeStart(self, ns: Optional[str], name: str, process: Optional[str]):
         if not self.isCurrentNodeClosed:
             yield ">"
-        yield f"<{ns+':' if ns else ''}{name}"
+        if ns == "pi":
+            yield f"<?{name}"
+        else:
+            yield f"<{ns+':' if ns else ''}{name}"
         self.hasPreviousNode = True
         self.isCurrentNodeEmpty = True
         self.isCurrentNodeClosed = False
@@ -669,7 +692,9 @@ class XMLEmitter(Emitter):
         yield None
 
     def onNodeEnd(self, ns: Optional[str], name: str, process: Optional[str]):
-        if self.isCurrentNodeEmpty:
+        if ns == "pi":
+            yield "?>\n"
+        elif self.isCurrentNodeEmpty:
             yield " />"
         else:
             yield f"</{ns+':' if ns else ''}{name}>"

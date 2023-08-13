@@ -1,0 +1,6 @@
+document xmlns:svg="http://www.w3.org/2000/svg"
+svg:svg width=300 height=100
+	svg:rect x="10" y="10" width="30" height="30" fill="#FF6B6B"
+	svg:polygon points="60,40 90,10 120,40" fill="#FFD166"
+	svg:circle cx="175" cy="25" r="20" fill="#6A7BAF"
+# EOF
