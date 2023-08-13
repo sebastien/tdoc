@@ -1,4 +1,4 @@
-== Tree document format
+# Tree document format
 
 The tree document format (or *tdoc* for short) is a way to easily write
 tree-structured data using a regular text editor. This format makes it
